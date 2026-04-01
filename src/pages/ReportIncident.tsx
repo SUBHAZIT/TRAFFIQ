@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, MapPin, Camera, Upload, AlertTriangle, ArrowLeft, X, Loader2 } from 'lucide-react';
+import { Shield, MapPin, Camera, Upload, AlertTriangle, ArrowLeft, X, Loader2, Navigation, Search } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -182,7 +182,7 @@ export default function ReportIncident() {
   return (
     <div className="h-screen flex flex-col bg-slate-50 uppercase tracking-widest text-primary overflow-hidden">
       {/* GOV STRIP */}
-      <div className="bg-primary px-4 py-1.5 text-[10px] font-bold text-white relative z-50 shrink-0">
+      <div className="hidden md:block bg-primary px-4 py-1.5 text-[10px] font-bold text-white relative z-50 shrink-0">
         <div className="container mx-auto flex items-center justify-between">
           <span className="flex items-center gap-2">
             <Shield className="h-3 w-3" />
@@ -192,7 +192,7 @@ export default function ReportIncident() {
         </div>
       </div>
 
-      <header className="relative z-10 flex h-20 items-center justify-between border-b-4 border-primary bg-white px-8 shadow-xl shrink-0">
+      <header className="hidden md:flex relative z-10 h-20 items-center justify-between border-b-4 border-primary bg-white px-8 shadow-xl shrink-0">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate(-1)} className="p-2 border-2 border-primary/20 hover:bg-primary hover:text-white transition-all shadow-sm">
             <ArrowLeft className="h-5 w-5" />
@@ -210,9 +210,9 @@ export default function ReportIncident() {
         </div>
       </header>
 
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         {/* LEFT PANEL: LARGE TACTICAL MAP */}
-        <div className="flex-1 relative border-r-4 border-primary group">
+        <div className="absolute inset-0 md:static md:flex-1 md:border-r-4 border-primary group z-0">
            {/* SCANNER EFFECT */}
            <div className="absolute top-0 left-0 w-full h-1 bg-red-500/20 animate-scan z-20 pointer-events-none" />
            
@@ -220,12 +220,13 @@ export default function ReportIncident() {
              onMapClick={handleMapClick}
              userLocation={userLocation}
              incidents={lat && lng ? [{ id: 'pre-report', lat: parseFloat(lat), lng: parseFloat(lng), severity: 'critical', type: 'PIN' }] : []}
+             cleanMode={true}
            />
 
            {/* MAP HUD OVERLAYS */}
-           <div className="absolute top-6 left-6 z-10 flex flex-col gap-4">
+           <div className="absolute top-20 left-4 right-4 md:top-6 md:left-6 z-10 flex flex-col gap-4 pointer-events-none">
               {isLoaded && (
-                <div className="bg-primary p-2 border-2 border-white shadow-2xl backdrop-blur-md w-64 relative">
+                <div className="bg-primary p-2 border-2 border-white shadow-2xl backdrop-blur-md w-full md:w-64 relative pointer-events-auto">
                   <Autocomplete onLoad={onAutocompleteLoad} onPlaceChanged={onPlaceChanged}>
                     <input
                       type="text"
@@ -233,11 +234,12 @@ export default function ReportIncident() {
                       className="w-full border-2 border-white/20 bg-white/10 px-3 py-2 pr-8 text-[10px] font-black text-white focus:outline-none focus:border-white placeholder:text-white/40"
                     />
                   </Autocomplete>
-                  <MapPin className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40 pointer-events-none" />
+                  <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-3 w-3 text-white/40 pointer-events-none" />
                 </div>
               )}
 
-              <div className="bg-primary p-4 border-2 border-white shadow-2xl backdrop-blur-md w-64">
+              {/* Huge Coordinate Box (Desktop Only) */}
+              <div className="hidden md:block bg-primary p-4 border-2 border-white shadow-2xl backdrop-blur-md w-64 pointer-events-auto">
                  <div className="text-[8px] font-black text-white/40 tracking-[0.2em] mb-2">GEOSPATIAL COORDINATES</div>
                  <div className="space-y-3">
                     <div className="flex justify-between items-end border-b border-white/10 pb-1">
@@ -260,15 +262,35 @@ export default function ReportIncident() {
                   </button>
               </div>
 
-              <div className="bg-white/90 p-3 border-2 border-primary shadow-lg backdrop-blur-sm w-64">
-                 <div className="text-[8px] font-black text-primary/40 uppercase tracking-[0.2em] mb-1">TARGET STATUS</div>
-                 <div className="text-[10px] font-black text-primary">
+              {/* Status Indicator */}
+              <div className="pointer-events-auto bg-white/90 p-2 md:p-3 border-2 border-primary shadow-lg backdrop-blur-sm w-[60%] md:w-64 truncate">
+                 <div className="text-[7px] md:text-[8px] font-black text-primary/40 uppercase tracking-[0.2em] mb-1">TARGET STATUS</div>
+                 <div className="text-[9px] md:text-[10px] font-black text-primary truncate">
                    {locationName || (lat && lng ? 'LOCATION ACQUIRED' : 'WAITING FOR INPUT...')}
                  </div>
               </div>
            </div>
 
-           <div className="absolute bottom-6 right-6 z-10">
+           {/* Mobile Floating Back Button */}
+           <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="md:hidden absolute top-4 left-4 h-11 w-11 bg-white rounded-full border-2 border-primary shadow-xl flex items-center justify-center text-primary z-20 transition-transform active:scale-95"
+            >
+              <ArrowLeft className="h-5 w-5" />
+           </button>
+
+           {/* Mobile GPS Force Button (Floating absolute on right) */}
+           <button
+              type="button"
+              onClick={detectLocation}
+              disabled={locating}
+              className="md:hidden absolute top-4 right-4 h-11 w-11 bg-white rounded-full border-2 border-primary shadow-xl flex items-center justify-center text-primary z-20 transition-transform active:scale-95"
+            >
+              {locating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Navigation className="h-5 w-5" />}
+           </button>
+
+           <div className="hidden md:block absolute bottom-6 right-6 z-10">
               <div className="bg-primary/90 text-white px-4 py-2 text-[10px] font-black border-2 border-white/20 shadow-2xl backdrop-blur-md flex items-center gap-3">
                 <div className="h-2 w-2 rounded-full bg-green-400" />
                 SATELLITE DOWNLINK: STABLE (99.2%)
@@ -277,7 +299,12 @@ export default function ReportIncident() {
         </div>
 
         {/* RIGHT PANEL: REPORT FORM */}
-        <div className="w-[450px] bg-white overflow-y-auto p-8 shadow-[-20px_0_40px_rgba(0,0,0,0.05)] border-l-4 border-primary">
+        <div className="absolute bottom-0 left-0 right-0 md:static w-full md:w-[450px] bg-white overflow-y-auto px-6 pt-4 pb-24 md:p-8 shadow-[0_-20px_50px_rgba(0,0,0,0.2)] md:shadow-[-20px_0_40px_rgba(0,0,0,0.05)] md:border-l-4 border-primary z-10 max-h-[65vh] md:max-h-none rounded-t-3xl md:rounded-none flex flex-col">
+          {/* DRAG HANDLE (MOBILE ONLY) */}
+          <div className="md:hidden flex justify-center w-full mb-6 shrink-0 pt-2">
+            <div className="w-12 h-1.5 bg-slate-300 rounded-full" />
+          </div>
+
           <motion.form
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -360,7 +387,7 @@ export default function ReportIncident() {
             </section>
 
             {/* Final Submission */}
-            <section className="pt-6 border-t-4 border-primary">
+            <section className="pt-6 border-t-4 border-primary mb-24 md:mb-0">
               <label className="mb-4 block font-black text-[10px] tracking-[0.2em] text-primary/40">SUPPLEMENTARY DATA</label>
               <textarea
                 value={description}
@@ -370,15 +397,17 @@ export default function ReportIncident() {
                 placeholder="REPORT DESCRIPTIVE DATA..."
               />
               
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative flex w-full items-center justify-center gap-4 bg-red-600 py-6 font-black text-sm tracking-[0.3em] text-white transition-all hover:bg-red-700 disabled:opacity-50 overflow-hidden shadow-2xl active:scale-95"
-              >
-                <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 skew-x-[45deg]" />
-                {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <AlertTriangle className="h-6 w-6" />}
-                {loading ? 'TRANSMITTING...' : 'BROADCAST REPORT'}
-              </button>
+              <div className="fixed md:static bottom-0 left-0 right-0 p-4 md:p-0 bg-white md:bg-transparent shadow-[0_-20px_40px_rgba(0,0,0,0.1)] md:shadow-none z-50 border-t-4 md:border-t-0 border-primary md:border-transparent">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="group relative flex w-full items-center justify-center gap-2 md:gap-4 bg-red-600 py-5 md:py-6 rounded-xl md:rounded-none font-black text-xs md:text-sm tracking-[0.2em] md:tracking-[0.3em] text-white transition-all hover:bg-red-700 disabled:opacity-50 overflow-hidden shadow-2xl active:scale-95"
+                >
+                  <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 skew-x-[45deg]" />
+                  {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <AlertTriangle className="h-6 w-6" />}
+                  {loading ? 'TRANSMITTING...' : 'BROADCAST REPORT'}
+                </button>
+              </div>
             </section>
           </motion.form>
         </div>

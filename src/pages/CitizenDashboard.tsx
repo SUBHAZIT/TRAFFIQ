@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, AlertTriangle, MapPin, Bell, Car, LogOut, Plus, Radio, Eye, Building2, Loader2, Search, Navigation } from 'lucide-react';
+import { Shield, AlertTriangle, MapPin, Bell, Car, LogOut, Plus, Radio, Eye, Building2, Loader2, Search, Navigation, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -357,7 +357,7 @@ export default function CitizenDashboard() {
   return (
     <div className="flex h-screen flex-col bg-slate-50 uppercase tracking-widest text-primary">
       {/* GOV STRIP */}
-      <div className="bg-primary px-4 py-1 text-[10px] font-bold text-white">
+      <div className="hidden md:flex bg-primary px-4 py-1 text-[10px] font-bold text-white">
         <div className="container flex items-center justify-between">
           <span className="flex items-center gap-1">
             <Building2 className="h-3 w-3" />
@@ -367,7 +367,7 @@ export default function CitizenDashboard() {
         </div>
       </div>
 
-      <header className="flex h-20 shrink-0 items-center justify-between border-b-4 border-primary bg-white px-6 shadow-md">
+      <header className="hidden md:flex h-20 shrink-0 items-center justify-between border-b-4 border-primary bg-white px-6 shadow-md">
         <div className="flex items-center gap-4">
           <Link to="/" className="flex items-center gap-2">
             <img src={traffiqLogo} alt="Logo" className="h-12 w-auto object-contain" />
@@ -388,10 +388,10 @@ export default function CitizenDashboard() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-8">
-        <div className="mx-auto max-w-5xl space-y-8">
-          {/* Quick Actions */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div className="flex-1 md:overflow-y-auto md:p-8 flex flex-col relative w-full h-full">
+        <div className="mx-auto max-w-5xl space-y-8 w-full h-full md:h-auto">
+          {/* Quick Actions (Desktop Only) */}
+          <div className="hidden md:grid grid-cols-1 sm:grid-cols-3 gap-6">
             <Link
               to="/report"
               className="group bg-white border-2 border-primary/10 p-6 shadow-lg transition-all hover:border-primary"
@@ -424,21 +424,10 @@ export default function CitizenDashboard() {
             </div>
           </div>
 
-          {/* Map View */}
-          <div className="relative h-[680px] border-4 border-primary shadow-2xl overflow-hidden">
-            <MapContainer
-              incidents={incidents}
-              vehicles={vehicles}
-              selectedIncident={selectedIncident}
-              setSelectedIncident={setSelectedIncident}
-              userLocation={userLocation}
-              directions={directions}
-              isJourneyStarted={isJourneyStarted}
-              routeBlocks={routeBlocks}
-            />
-
-            {/* Search HUD */}
-            <div className="absolute top-1 left-1 z-20 w-96 space-y-4">
+          <div className="flex flex-col md:block md:relative w-full h-full md:h-auto">
+            
+            {/* Search HUD (Desktop absolute view) */}
+            <div className="hidden md:block absolute top-6 left-6 z-20 w-96 space-y-4">
               <div className="bg-primary/95 p-6 border-2 border-white shadow-2xl backdrop-blur-md">
                 <div className="text-[8px] font-black text-white/40 tracking-[0.3em] mb-3 uppercase">STRATEGIC DESTINATION SEARCH</div>
                 <div className="flex gap-2">
@@ -545,38 +534,125 @@ export default function CitizenDashboard() {
                       </div>
                     ))}
                   </div>
-                  {/* Removed redundant caution text */}
                 </motion.div>
               )}
             </div>
 
-            {/* Live Indicators */}
-            <div className="absolute bottom-6 left-6 z-10 space-y-2">
-              <div className="bg-primary px-3 py-1.5 flex items-center gap-2 border-2 border-white shadow-lg">
-                <div className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                <span className="text-[10px] font-black text-white tracking-widest">LIVE TRACKING ACTIVE</span>
-              </div>
-              <div className="bg-white/90 p-3 border-2 border-primary shadow-lg backdrop-blur-sm">
-                <div className="text-[8px] font-black text-primary/40 uppercase tracking-[0.2em] mb-1">CURRENT SECTOR</div>
-                <div className="text-xs font-black text-primary">{sector.toUpperCase()}</div>
-              </div>
-            </div>
+            {/* Map Canvas - Full screen on mobile via absolute inset-0 */}
+            <div className="absolute inset-0 md:relative md:h-[680px] w-full md:border-4 md:border-primary shadow-2xl overflow-hidden flex-none z-0">
+              <MapContainer
+                incidents={incidents}
+                vehicles={vehicles.filter(v => v.type !== 'ambulance')}
+                selectedIncident={selectedIncident}
+                setSelectedIncident={setSelectedIncident}
+                userLocation={userLocation}
+                directions={directions}
+                isJourneyStarted={isJourneyStarted}
+                routeBlocks={routeBlocks}
+              />
 
-            {/* Weather Status Floating Card */}
-            {weather && (
-              <div className="absolute bottom-6 right-6 bg-white/90 p-4 border-4 border-primary shadow-2xl z-10 backdrop-blur-md">
-                <div className="text-[8px] font-black text-primary/40 uppercase tracking-[0.2em] mb-1">LOCAL ATMOSPHERE</div>
-                <div className="flex items-center gap-4">
-                  <div className="text-3xl font-black text-primary">{weather.condition}</div>
-                  <div className="h-10 w-[2px] bg-primary/20" />
-                  <div className="text-lg font-black text-primary/60">{weather.temp}°C</div>
+              {/* Live Indicators Overlay (Mobile & Desktop) */}
+              <div className="absolute bottom-28 left-4 md:bottom-6 md:left-6 z-10 space-y-2 w-36 md:w-auto md:max-w-[50%] pointer-events-auto">
+                <div className="bg-primary px-2 py-1.5 md:px-3 flex items-center gap-2 border-2 border-white shadow-lg">
+                  <div className="h-1.5 w-1.5 md:h-2 md:w-2 rounded-full bg-red-500 animate-ping flex-shrink-0" />
+                  <span className="text-[8px] md:text-[10px] font-black text-white tracking-widest leading-none">LIVE TRACKING ACTIVE</span>
+                </div>
+                <div className="bg-white/90 p-2 md:p-3 border-2 border-primary shadow-lg backdrop-blur-sm">
+                  <div className="text-[7px] md:text-[8px] font-black text-primary/40 uppercase tracking-[0.2em] mb-0.5 md:mb-1">CURRENT SECTOR</div>
+                  <div className="text-[9px] md:text-xs font-black text-primary leading-tight truncate">{sector.toUpperCase()}</div>
                 </div>
               </div>
-            )}
+
+              {/* Desktop Weather Status Floating Card */}
+              {weather && (
+                <div className="hidden md:block absolute bottom-6 right-6 bg-white/90 p-4 border-4 border-primary shadow-xl z-10 backdrop-blur-md">
+                  <div className="text-[8px] font-black text-primary/40 uppercase tracking-[0.2em] mb-1">LOCAL ATMOSPHERE</div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-3xl font-black text-primary">{weather.condition}</div>
+                    <div className="h-10 w-[2px] bg-primary/20" />
+                    <div className="text-lg font-black text-primary/60">{weather.temp}°C</div>
+                  </div>
+                </div>
+              )}
+
+              {/* MOBILE ONLY OVERLAYS */}
+              <div className="md:hidden absolute inset-0 z-20 pointer-events-none">
+                
+                {/* Mobile Floating Search */}
+                <div className="absolute top-4 left-4 right-4 pointer-events-auto">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1 bg-white rounded-full shadow-2xl border-2 border-primary overflow-hidden">
+                      <MapPin className="absolute left-5 top-4 h-5 w-5 text-primary/30" />
+                      <input
+                        type="text"
+                        value={destination}
+                        onChange={(e) => setDestination(e.target.value)}
+                        className="w-full bg-transparent pl-12 pr-4 py-4 font-black text-sm text-primary focus:outline-none placeholder:text-primary/40"
+                        placeholder="SEARCH DESTINATION..."
+                      />
+                    </div>
+                    <button
+                      onClick={calculateRoute}
+                      disabled={isRouting}
+                      className="h-[60px] w-[60px] rounded-full bg-primary text-white flex items-center justify-center shadow-2xl shrink-0"
+                    >
+                      {isRouting ? <Loader2 className="h-6 w-6 animate-spin" /> : <Search className="h-6 w-6" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile Journey HUD */}
+                {isJourneyStarted && (
+                  <div className="absolute top-24 left-4 right-4 pointer-events-auto">
+                    <div className="bg-primary/95 p-4 rounded-3xl shadow-2xl text-white border-2 border-white backdrop-blur-md">
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="flex items-center gap-2">
+                           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                           <span className="text-[10px] font-black tracking-widest text-green-400">MISSION ACTIVE</span>
+                        </div>
+                        <button onClick={() => { setIsJourneyStarted(false); setProgress(0); setTotalDistance(null); }} className="text-white/50 p-1"><X className="h-5 w-5"/></button>
+                      </div>
+                      <div className="flex justify-between items-end">
+                          <div>
+                            <div className="text-[9px] font-bold tracking-widest text-white/40 mb-1">ARRIVAL ETA</div>
+                            <div className="text-2xl font-black">{eta}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[9px] font-bold tracking-widest text-white/40 mb-1">SPEED</div>
+                            <div className="text-2xl font-black">{speed} <span className="text-xs">KM/H</span></div>
+                          </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Mobile Mini Round Icons / Action Buttons */}
+                <div className="absolute bottom-28 right-4 flex flex-col gap-4 pointer-events-auto">
+                  <button onClick={() => toast.info(`Current Sector: ${sector.toUpperCase()}`)} className="h-14 w-14 rounded-full bg-white shadow-[0_10px_20px_rgba(0,0,0,0.2)] border-2 border-primary flex flex-col items-center justify-center text-primary">
+                    <Navigation className="h-5 w-5 mb-0.5" />
+                  </button>
+                  <button onClick={() => window.location.reload()} className="h-14 w-14 rounded-full bg-white shadow-[0_10px_20px_rgba(0,0,0,0.2)] border-2 border-primary flex items-center justify-center text-primary relative">
+                    <Bell className="h-6 w-6" />
+                    {unifiedAlerts.length > 0 && <span className="absolute top-0 right-0 h-4 w-4 bg-red-500 rounded-full border-2 border-white animate-pulse" />}
+                  </button>
+                  <button onClick={signOut} className="h-14 w-14 rounded-full bg-slate-800 shadow-[0_10px_20px_rgba(0,0,0,0.2)] border-2 border-slate-700 flex items-center justify-center text-red-400">
+                    <LogOut className="h-5 w-5 ml-1" />
+                  </button>
+                </div>
+
+                {/* Mobile Bottom Report Issue */}
+                <div className="absolute bottom-8 left-4 right-4 pointer-events-auto">
+                  <Link to="/report" className="flex items-center justify-center gap-3 w-full bg-red-600 text-white rounded-full py-5 text-base font-black tracking-widest shadow-[0_15px_40px_rgba(220,38,38,0.5)] border-2 border-red-400 transition-transform active:scale-95">
+                    <AlertTriangle className="h-6 w-6" />
+                    REPORT LIVE INCIDENT
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Alerts */}
-          <div className="bg-white border-4 border-primary shadow-2xl">
+          {/* Alerts (Desktop Only) */}
+          <div className="hidden md:block bg-white border-4 border-primary shadow-2xl">
             <div className="bg-primary px-6 py-3">
               <h2 className="text-xs font-black tracking-widest text-white flex items-center gap-2">
                 <Bell className="h-4 w-4" />
@@ -608,8 +684,8 @@ export default function CitizenDashboard() {
             </div>
           </div>
 
-          {/* Active Incidents */}
-          <div className="bg-white border-2 border-primary/10 shadow-xl">
+          {/* Active Incidents (Desktop Only) */}
+          <div className="hidden md:block bg-white border-2 border-primary/10 shadow-xl">
             <div className="border-b-2 border-primary/10 px-6 py-4">
               <h2 className="text-xs font-black tracking-widest text-primary flex items-center gap-2">
                 <MapPin className="h-4 w-4" />

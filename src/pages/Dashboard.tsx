@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import traffiqLogo from '@/assets/TRAFFIQ LOGO.png';
 import MapContainer from '@/components/MapContainer';
+import GreenCorridorSimulator from '@/components/GreenCorridorSimulator';
 
 
 
@@ -45,7 +46,7 @@ export default function Dashboard() {
   const [signals, setSignals] = useState<TrafficSignal[]>(initialSignals);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
-  const [simRunning, setSimRunning] = useState(true);
+  const [showSimulator, setShowSimulator] = useState(false);
   const [time, setTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState<'units' | 'verification' | 'alerts' | 'history'>('units');
   const [verifTab, setVerifTab] = useState<'pending' | 'verified'>('pending');
@@ -266,11 +267,11 @@ export default function Dashboard() {
             <span className="text-xs font-black text-blue-600">LIVE FEED</span>
           </div>
           <button
-            onClick={() => setSimRunning(!simRunning)}
+            onClick={() => setShowSimulator(true)}
             className="flex items-center gap-2 rounded border-2 border-primary/20 px-3 py-1.5 text-xs font-bold transition-all hover:bg-primary hover:text-white"
           >
-            {simRunning ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-            {simRunning ? 'PAUSE' : 'START'}
+            <Zap className="h-3 w-3" />
+            SIMULATOR
           </button>
           <div className="h-10 w-px bg-primary/10 mx-2" />
           <div className="flex items-center gap-3">
@@ -285,9 +286,9 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
         {/* SIDEBAR */}
-        <aside className="flex w-96 shrink-0 flex-col border-r-2 border-primary/10 bg-white shadow-lg z-20">
+        <aside className="flex w-full md:w-96 md:max-h-full max-h-[50vh] shrink-0 flex-col md:border-r-2 border-b-2 md:border-b-0 border-primary/10 bg-white shadow-lg z-20">
           <div className="flex bg-slate-100 p-1">
             <button
               onClick={() => setActiveTab('units')}
@@ -592,6 +593,16 @@ export default function Dashboard() {
                   </button>
                 </div>
               </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {showSimulator && (
+              <GreenCorridorSimulator 
+                onClose={() => setShowSimulator(false)} 
+                baseSignals={signals} 
+                baseIncidents={incidents} 
+                userLocation={userLocation}
+              />
             )}
           </AnimatePresence>
         </main>

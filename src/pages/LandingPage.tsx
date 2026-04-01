@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Activity, Radio, ChevronRight, Zap, Eye, MapPin, AlertTriangle, Building2, Globe, Lock, Contrast, ChevronDown, Check } from 'lucide-react';
+import { Shield, Activity, Radio, ChevronRight, Zap, Eye, MapPin, AlertTriangle, Building2, Globe, Lock, Contrast, ChevronDown, Check, Menu, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
@@ -243,6 +243,7 @@ const servicesList = [
 
 export default function LandingPage() {
   const [lang, setLang] = useState<'en' | 'hi' | 'mr' | 'ta' | 'te'>('en');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fontSize, setFontSize] = useState<number>(1);
   const [highContrast, setHighContrast] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<'lang' | 'access' | null>(null);
@@ -404,13 +405,38 @@ export default function LandingPage() {
           <div className="flex items-center gap-4">
             <Link
               to="/auth"
-              className={`group relative flex items-center gap-2 overflow-hidden rounded border-2 transition-all ${highContrast ? 'border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black' : 'border-primary bg-white text-primary hover:bg-primary hover:text-white'} px-6 py-2.5 text-sm font-black`}
+              className={`hidden md:flex group relative items-center gap-2 overflow-hidden rounded border-2 transition-all ${highContrast ? 'border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black' : 'border-primary bg-white text-primary hover:bg-primary hover:text-white'} px-6 py-2.5 text-sm font-black`}
             >
               <span>{t.login}</span>
               <ChevronRight className="h-4 w-4" />
             </Link>
+            <button 
+              className="md:hidden p-2"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Nav Dropdown */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className={`md:hidden border-t-2 ${highContrast ? 'border-yellow-400 bg-black text-yellow-400' : 'border-primary bg-white'} overflow-hidden shadow-2xl absolute w-full`}
+            >
+              <div className="flex flex-col p-4 gap-2 text-center font-black text-sm">
+                <a href="#services" onClick={() => setMobileMenuOpen(false)} className={`py-4 ${highContrast ? 'hover:bg-yellow-400/20' : 'hover:bg-primary/5'} border-b border-primary/5`}>{t.navServices}</a>
+                <a href="#impact" onClick={() => setMobileMenuOpen(false)} className={`py-4 ${highContrast ? 'hover:bg-yellow-400/20' : 'hover:bg-primary/5'} border-b border-primary/5`}>{t.navImpact}</a>
+                <a href="#about" onClick={() => setMobileMenuOpen(false)} className={`py-4 ${highContrast ? 'hover:bg-yellow-400/20' : 'hover:bg-primary/5'} border-b border-primary/5`}>{t.navAbout}</a>
+                <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="py-4 mt-2 bg-primary text-white rounded uppercase tracking-widest">{t.login}</Link>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       {/* HERO SECTION */}

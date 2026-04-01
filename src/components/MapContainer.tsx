@@ -1,5 +1,7 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { GoogleMap, useJsApiLoader, TrafficLayer, Marker, Polyline, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, TrafficLayer, Marker, Polyline, InfoWindow, DirectionsRenderer, OverlayViewF } from '@react-google-maps/api';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+import { Info } from 'lucide-react';
 
 const containerStyle = {
   width: '100%',
@@ -7,7 +9,7 @@ const containerStyle = {
   minHeight: '400px'
 };
 
-const center = {
+const defaultCenter = {
   lat: 28.6139, // Default to New Delhi
   lng: 77.2090
 };
@@ -27,6 +29,8 @@ interface MapContainerProps {
   tilt?: number;
   heading?: number;
   routeBlocks?: any[];
+  center?: { lat: number; lng: number } | null;
+  cleanMode?: boolean;
 }
 
 const MapContainer: React.FC<MapContainerProps> = ({ 
@@ -43,7 +47,9 @@ const MapContainer: React.FC<MapContainerProps> = ({
   isJourneyStarted = false,
   tilt = 0,
   heading = 0,
-  routeBlocks = []
+  routeBlocks = [],
+  center,
+  cleanMode = false
 }) => {
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -52,6 +58,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
   });
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [showMobileLegend, setShowMobileLegend] = useState(false);
 
   const onLoad = useCallback(function callback(map: google.maps.Map) {
     setMap(map);
@@ -79,7 +86,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
     <div className="h-full w-full border-4 border-primary shadow-2xl relative">
       <GoogleMap
         mapContainerStyle={containerStyle}
-        center={center}
+        center={center || defaultCenter}
         zoom={12}
         onLoad={onLoad}
         onUnmount={onUnmount}
@@ -114,7 +121,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
           ]
         }}
       >
-        <TrafficLayer />
+        {!cleanMode && <TrafficLayer />}
         
         {/* Incident Markers */}
         {incidents.map((incident) => (
@@ -130,13 +137,39 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
         {/* Vehicle Markers */}
         {vehicles.map((vehicle) => (
-          <Marker
-            key={vehicle.id}
-            position={{ lat: vehicle.lat, lng: vehicle.lng }}
-            icon={{
-              url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-            }}
-          />
+          vehicle.type === 'ambulance' ? (
+            <OverlayViewF
+              key={vehicle.id}
+              position={{ lat: vehicle.lat, lng: vehicle.lng }}
+              mapPaneName="overlayMouseTarget"
+            >
+              <div 
+                style={{ 
+                  transform: 'translate(-50%, -50%) scale(0.4)',
+                  width: '300px', 
+                  height: '300px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none'
+                }}
+              >
+                <DotLottieReact
+                  src="https://lottie.host/757ee603-1ccc-42ad-a9c2-40aea527944c/oI7Qtwq0sh.lottie"
+                  loop
+                  autoplay
+                />
+              </div>
+            </OverlayViewF>
+          ) : (
+            <Marker
+              key={vehicle.id}
+              position={{ lat: vehicle.lat, lng: vehicle.lng }}
+              icon={{
+                url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+              }}
+            />
+          )
         ))}
 
         {userLocation && (
@@ -274,8 +307,17 @@ const MapContainer: React.FC<MapContainerProps> = ({
         )}
       </GoogleMap>
       
+      {/* Mobile Legend Toggle */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setShowMobileLegend(!showMobileLegend); }}
+        className="md:hidden absolute top-24 right-4 bg-white h-10 w-10 flex items-center justify-center rounded-full border-2 border-primary shadow-xl text-primary z-20"
+      >
+        <Info className="h-5 w-5" />
+      </button>
+
       {/* Legend overlay */}
-      <div className="absolute top-4 right-4 bg-white/95 p-4 border-2 border-primary shadow-2xl space-y-3 backdrop-blur-md text-primary">
+      <div className={`absolute top-[140px] right-4 md:top-4 md:right-4 bg-white/95 p-4 border-2 border-primary shadow-2xl space-y-3 backdrop-blur-md text-primary z-20 ${showMobileLegend ? 'block' : 'hidden md:block'}`}>
         <div className="flex items-center gap-2 pb-2 border-b border-primary/10">
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           <span className="text-[10px] font-black tracking-[0.2em]">LIVE TRAFFIC DATA</span>

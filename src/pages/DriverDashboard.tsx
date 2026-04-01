@@ -603,9 +603,9 @@ export default function DriverDashboard() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Left Panel - Controls */}
-          <aside className="flex w-80 shrink-0 flex-col border-r-4 border-primary bg-white overflow-y-auto">
+          <aside className="flex w-full md:w-80 md:max-h-full max-h-[50vh] shrink-0 flex-col md:border-r-4 border-b-4 md:border-b-0 border-primary bg-white overflow-y-auto">
             <div className="border-b-2 border-primary/10 p-6">
               <h3 className="mb-4 text-[9px] font-black tracking-[0.2em] text-primary/40">UNIT IDENTIFICATION</h3>
               <div className="space-y-3">
