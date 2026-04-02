@@ -31,6 +31,11 @@ export interface Incident {
   reportedAt: Date;
   resolvedAt?: Date;
   assignedVehicles: string[];
+  location_name?: string;
+  image_url?: string;
+  upvotes?: number;
+  downvotes?: number;
+  is_verified?: boolean;
 }
 
 export interface TrafficSignal {

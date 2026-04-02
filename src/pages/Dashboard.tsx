@@ -140,6 +140,24 @@ export default function Dashboard() {
 
     setIncidents(fetchedIncidents);
 
+    // AUTO-COMPLETE STALE MISSIONS (>20 MIN)
+    const staleRoutes = fetchedRoutes.filter(r => 
+      (now - new Date(r.created_at).getTime()) > 20 * 60 * 1000
+    );
+
+    if (staleRoutes.length > 0) {
+      const staleRouteIds = staleRoutes.map(r => r.id);
+      const staleVehicleIds = staleRoutes.map(r => r.vehicle_id);
+
+      await supabase.from('routes').update({ active: false }).in('id', staleRouteIds);
+      await supabase.from('vehicles').update({ status: 'idle' }).in('id', staleVehicleIds);
+
+      fetchedRoutes = fetchedRoutes.filter(r => !staleRouteIds.includes(r.id));
+      fetchedVehicles = fetchedVehicles.map(v => 
+        staleVehicleIds.includes(v.id) ? { ...v, status: 'idle' } : v
+      );
+    }
+
     // Unified Alerts Logic
     const dbAlerts = fetchedIncidents
       .filter(inc => !inc.resolved_at && (inc.severity === 'critical' || inc.severity === 'high'))
@@ -148,6 +166,10 @@ export default function Dashboard() {
         rawId: inc.id,
         message: `${inc.type.toUpperCase()}: ${inc.description.toUpperCase()}`,
         location: (inc as any).location_name || `SECTOR ${Math.floor(inc.lat)}.${Math.floor(inc.lng)}`,
+        image_url: (inc as any).image_url,
+        upvotes: (inc as any).upvotes,
+        downvotes: (inc as any).downvotes,
+        is_verified: (inc as any).is_verified,
         time: `${Math.round((Date.now() - new Date(inc.created_at).getTime()) / 60000)}M AGO`,
         source: 'SYSTEM'
       }));
@@ -333,6 +355,21 @@ export default function Dashboard() {
     } catch (err: any) {
       console.error(err);
       toast.error("FAILED TO RESOLVE INCIDENT");
+    }
+  };
+
+  const handleDeleteIncident = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('incidents')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      toast.success("INCIDENT REMOVED FROM SYSTEM");
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("FAILED TO REMOVE INCIDENT");
     }
   };
 
@@ -549,15 +586,42 @@ export default function Dashboard() {
                         <MapPin className="h-2 w-2" />
                         <span className="text-[8px] font-bold uppercase">{alert.location}</span>
                       </div>
+                      
+                      {/* Community Validation & Evidence Component */}
+                      {alert.source === 'SYSTEM' && alert.image_url && (
+                        <div className="my-2 border-2 border-primary/20 p-1 bg-white">
+                          <img src={alert.image_url} alt="Incident Evidence" className="w-full h-32 object-cover object-center" />
+                        </div>
+                      )}
+                      {alert.source === 'SYSTEM' && (
+                        <div className="text-[9px] font-bold mb-2 flex items-center justify-between bg-white p-2 border border-primary/10">
+                          <div className="flex items-center gap-3">
+                            <span className="text-green-600">👍 {alert.upvotes || 0}</span>
+                            <span className="text-red-600">👎 {alert.downvotes || 0}</span>
+                          </div>
+                          <span className={alert.is_verified ? 'text-green-600 font-black tracking-widest' : 'text-primary/40 tracking-widest'}>
+                             {alert.is_verified ? 'VERIFIED' : 'PENDING'}
+                          </span>
+                        </div>
+                      )}
+
                       <div className="flex justify-between items-center mt-2">
                         <div className="text-[8px] font-bold text-primary/40 uppercase">STRATEGIC STATUS: {alert.time}</div>
                         {alert.source === 'SYSTEM' && (
-                          <button
-                            onClick={() => handleResolveIncident(alert.rawId)}
-                            className="bg-white border-2 border-red-500 text-red-600 px-3 py-1 text-[8px] font-black hover:bg-red-500 hover:text-white transition-colors"
-                          >
-                            RESOLVE
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleDeleteIncident(alert.rawId)}
+                              className="bg-white border-2 border-slate-400 text-slate-500 px-3 py-1 text-[8px] font-black hover:bg-slate-500 hover:text-white transition-colors"
+                            >
+                              DELETE
+                            </button>
+                            <button
+                              onClick={() => handleResolveIncident(alert.rawId)}
+                              className="bg-white border-2 border-red-500 text-red-600 px-3 py-1 text-[8px] font-black hover:bg-red-500 hover:text-white transition-colors"
+                            >
+                              RESOLVE
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -730,7 +794,7 @@ export default function Dashboard() {
             {showAnalytics && (
               <AnalyticsDashboard 
                 onClose={() => setShowAnalytics(false)} 
-                liveData={{ unifiedAlerts, vehicles, incidents }} 
+                liveData={{ vehicles, incidents }} 
                 userLocation={userLocation}
               />
             )}

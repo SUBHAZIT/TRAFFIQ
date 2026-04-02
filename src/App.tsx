@@ -14,6 +14,7 @@ import DriverDashboard from "./pages/DriverDashboard";
 import ReportIncident from "./pages/ReportIncident";
 import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
+import GlobalIncidentListener from "./components/GlobalIncidentListener";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <GlobalIncidentListener />
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/auth" element={<Auth />} />

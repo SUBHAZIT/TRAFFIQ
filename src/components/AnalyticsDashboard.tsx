@@ -83,42 +83,6 @@ const TIME_CHART_DATA = Array.from({length: 10}).map((_, i) => {
 
 // --- COMPONENTS ---
 
-// Custom Gauge Map
-const SpeedGauge = ({ speed }: { speed: number }) => {
-  // Angle spanning -120 to +120 (240 sweep)
-  // Max speed = 60
-  const normalizedSpeed = Math.min(Math.max(speed, 0), 60);
-  const angle = -120 + (normalizedSpeed / 60) * 240;
-
-  return (
-    <div className="relative w-full aspect-[2/1] overflow-hidden flex flex-col items-center justify-end">
-      <svg viewBox="0 0 200 100" className="w-full h-full overflow-visible">
-        {/* Background Arc */}
-        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#333" strokeWidth="20" />
-        {/* Red Zone (0-20) */}
-        <path d="M 20 100 A 80 80 0 0 1 60 30" fill="none" stroke="#ef4444" strokeWidth="20" />
-        {/* Yellow Zone (20-40) */}
-        <path d="M 60 30 A 80 80 0 0 1 140 30" fill="none" stroke="#eab308" strokeWidth="20" />
-        {/* Green Zone (40-60) */}
-        <path d="M 140 30 A 80 80 0 0 1 180 100" fill="none" stroke="#22c55e" strokeWidth="20" />
-        
-        {/* Needle */}
-        <g transform={`rotate(${angle} 100 100)`}>
-          <line x1="100" y1="100" x2="100" y2="40" stroke="#fff" strokeWidth="4" strokeLinecap="round" />
-          <circle cx="100" cy="100" r="8" fill="#fff" />
-        </g>
-        
-        {/* Texts */}
-        <text x="20" y="120" fill="#666" fontSize="12" textAnchor="middle">0</text>
-        <text x="60" y="15" fill="#666" fontSize="12" textAnchor="middle">20</text>
-        <text x="140" y="15" fill="#666" fontSize="12" textAnchor="middle">40</text>
-        <text x="180" y="120" fill="#666" fontSize="12" textAnchor="middle">60</text>
-      </svg>
-      <div className="absolute -bottom-6 text-xl font-black text-white/90">{speed.toFixed(1)} km/h</div>
-    </div>
-  );
-};
-
 export default function AnalyticsDashboard({ onClose, liveData, userLocation }: { onClose: () => void, liveData?: any, userLocation?: { lat: number, lng: number } | null }) {
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -128,11 +92,15 @@ export default function AnalyticsDashboard({ onClose, liveData, userLocation }: 
 
   const [currentDate, setCurrentDate] = useState(new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }));
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [mapCenter, setMapCenter] = useState({ lat: 22.5726, lng: 88.3639 });
+  const [mapCenter, setMapCenter] = useState(userLocation || { lat: 22.5726, lng: 88.3639 });
   const [playbackProgress, setPlaybackProgress] = useState(30);
 
   const [realEvents, setRealEvents] = useState<any[]>(EVENTS);
   const [activeEvent, setActiveEvent] = useState<any>(EVENTS[0]);
+
+  useEffect(() => {
+    if (userLocation) setMapCenter(userLocation);
+  }, [userLocation]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -140,66 +108,31 @@ export default function AnalyticsDashboard({ onClose, liveData, userLocation }: 
   }, []);
 
   useEffect(() => {
-    if (!isLoaded || !window.google) return;
+    const { incidents = [] } = liveData || {};
     
-    const checkLiveTraffic = () => {
-      const service = new google.maps.DistanceMatrixService();
-      
-      const origin = mapCenter;
-      const destinations = [
-        { lat: mapCenter.lat + 0.04, lng: mapCenter.lng, name: 'NORTHERN SECTOR' },
-        { lat: mapCenter.lat - 0.04, lng: mapCenter.lng, name: 'SOUTHERN BYPASS' },
-        { lat: mapCenter.lat, lng: mapCenter.lng + 0.04, name: 'EASTERN ARTERY' },
-        { lat: mapCenter.lat, lng: mapCenter.lng - 0.04, name: 'WESTERN DIVIDE' }
-      ];
+    const sortedIncidents = [...incidents].sort((a, b) => {
+      if (!a.resolved_at && b.resolved_at) return -1;
+      if (a.resolved_at && !b.resolved_at) return 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
-      service.getDistanceMatrix({
-        origins: [origin],
-        destinations: destinations.map(d => ({ lat: d.lat, lng: d.lng })),
-        travelMode: google.maps.TravelMode.DRIVING,
-        drivingOptions: {
-          departureTime: new Date(), 
-        }
-      }, (response, status) => {
-        if (status === 'OK' && response) {
-          const results = response.rows[0].elements;
-          
-          const newEvents = destinations.map((dest, i) => {
-            const el = results[i];
-            const dur = el?.duration?.value || 600;
-            const durTraffic = el?.duration_in_traffic?.value || dur;
-            const delay = durTraffic - dur;
-            const isResolved = delay < 120; // less than 2 mins delay = resolved
-            
-            return {
-              id: i + 1,
-              title: `CENTRAL NODE → ${dest.name}`,
-              time: `${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - LIVE`,
-              active: false,
-              resolved: isResolved,
-              stats: [
-                { icon: <Bus className="h-3 w-3"/>, val: Math.floor(Math.random() * 50) + 10, color: 'bg-teal-500' },
-                { icon: <Car className="h-3 w-3"/>, val: Math.floor(durTraffic / 10), color: isResolved ? 'bg-green-500' : 'bg-red-500' },
-                { label: 'DEL', val: Math.round(delay/60), color: 'bg-slate-700' }
-              ],
-              progress: Math.min(100, Math.max(0, (dur / durTraffic) * 100))
-            };
-          });
+    const newEvents = sortedIncidents.map(inc => ({
+      id: inc.id,
+      title: inc.location_name?.toUpperCase() || `SECTOR ${Math.floor(inc.lat)}.${Math.floor(inc.lng)}`,
+      time: `${new Date(inc.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${inc.resolved_at ? 'RESOLVED' : 'LIVE'}`,
+      active: false,
+      resolved: !!inc.resolved_at,
+      stats: [
+        { label: 'TYPE', val: inc.type.toUpperCase(), color: 'bg-slate-700' },
+        { label: 'SEV', val: inc.severity.toUpperCase(), color: inc.severity === 'critical' || inc.severity === 'high' ? 'bg-red-500' : 'bg-orange-500' }
+      ],
+      progress: inc.resolved_at ? 100 : 30,
+      dest: { lat: inc.lat, lng: inc.lng }
+    }));
 
-          setRealEvents(newEvents);
-          // Set active event to the one with the most traffic delay initially if no active event is explicitly interacted with
-          setActiveEvent(prev => prev && prev.id !== 1 ? prev : [...newEvents].sort((a,b) => b.stats[2].val - a.stats[2].val)[0]);
-        }
-      });
-    };
-
-    const initTimer = setTimeout(checkLiveTraffic, 2000); // 2 second delay to let map instance mount calmly
-    const interval = setInterval(checkLiveTraffic, 5 * 60 * 1000); // 5 mins
-    return () => {
-      clearTimeout(initTimer);
-      clearInterval(interval);
-    };
-  }, [isLoaded, mapCenter]);
+    setRealEvents(newEvents);
+    setActiveEvent(prev => newEvents.find(e => e.id === prev?.id) || newEvents[0] || null);
+  }, [liveData]);
 
   return (
     <motion.div 
@@ -231,7 +164,7 @@ export default function AnalyticsDashboard({ onClose, liveData, userLocation }: 
             <div className="mt-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
               Congestion Events
               <br/>
-              <span className="text-[10px] text-slate-500 font-normal normal-case">{realEvents.length} events detected</span>
+              <span className="text-[10px] text-slate-500 font-normal normal-case">{realEvents.filter(e => !e.resolved).length} actve / {realEvents.length} total</span>
             </div>
           </div>
           
@@ -241,13 +174,13 @@ export default function AnalyticsDashboard({ onClose, liveData, userLocation }: 
                 key={ev.id} 
                 onClick={() => setActiveEvent(ev)}
                 className={`p-4 border-l-4 cursor-pointer transition-colors ${
-                  activeEvent.id === ev.id ? 'bg-[#2980b9] border-red-500' : 'hover:bg-[#252525] border-transparent'
+                  activeEvent?.id === ev.id ? 'bg-[#2980b9] border-red-500' : 'hover:bg-[#252525] border-transparent'
                 }`}
               >
-                <div className={`font-bold text-sm mb-1 ${activeEvent.id === ev.id ? 'text-white' : 'text-slate-200'}`}>
+                <div className={`font-bold text-sm mb-1 ${activeEvent?.id === ev.id ? 'text-white' : 'text-slate-200'}`}>
                   {ev.title}
                 </div>
-                <div className={`flex items-center justify-between text-xs mb-3 ${activeEvent.id === ev.id ? 'text-blue-100' : 'text-slate-400'}`}>
+                <div className={`flex items-center justify-between text-xs mb-3 ${activeEvent?.id === ev.id ? 'text-blue-100' : 'text-slate-400'}`}>
                   <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {ev.time}</span>
                   {ev.resolved && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                 </div>
@@ -369,20 +302,7 @@ export default function AnalyticsDashboard({ onClose, liveData, userLocation }: 
             </div>
           </div>
 
-          {/* Bottom Deck */}
-          <div className="h-48 grid grid-cols-2 gap-1 rounded-b-sm">
-            {/* Clock Deck */}
-            <div className="bg-[#1e1e1e] border border-[#333] flex flex-col items-center justify-center p-6">
-              <div className="text-[5rem] font-medium leading-none text-slate-200 font-mono tracking-tighter mb-4 shadow-inner">
-                {currentTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })}
-              </div>
-              <div className="text-xs text-slate-500">{currentDate}</div>
-            </div>
-            {/* Speed Gauge Deck */}
-            <div className="bg-[#1e1e1e] border border-[#333] flex items-center justify-center p-6 relative">
-              <SpeedGauge speed={13.6} />
-            </div>
-          </div>
+          {/* Map Layer fills space completely now */}
         </main>
 
         {/* RIGHT PANEL: CHARTS */}

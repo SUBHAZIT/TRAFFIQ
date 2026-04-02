@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Shield, ArrowLeft, Activity, AlertTriangle, Car, Clock, TrendingUp, BarChart3, LogOut, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -9,6 +9,7 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart
 } from 'recharts';
+import { useJsApiLoader } from '@react-google-maps/api';
 
 const responseTimeData = [
   { month: 'JAN', avg: 4.8, target: 3.0 },
@@ -19,51 +20,127 @@ const responseTimeData = [
   { month: 'JUN', avg: 3.2, target: 3.0 },
 ];
 
-const incidentData = [
-  { type: 'ACCIDENT', count: 127, color: '#003366' },
-  { type: 'FIRE', count: 43, color: '#004488' },
-  { type: 'MEDICAL', count: 89, color: '#0055AA' },
-  { type: 'CONGESTION', count: 234, color: '#0066FF' },
-  { type: 'ROADBLOCK', count: 56, color: '#002244' },
-];
-
-const vehicleUtilData = [
-  { hour: '00', ambulance: 2, fire: 1, police: 3 },
-  { hour: '04', ambulance: 1, fire: 0, police: 2 },
-  { hour: '08', ambulance: 5, fire: 2, police: 6 },
-  { hour: '12', ambulance: 4, fire: 3, police: 5 },
-  { hour: '16', ambulance: 6, fire: 2, police: 7 },
-  { hour: '20', ambulance: 3, fire: 1, police: 4 },
-];
-
-const trafficData = [
-  { time: '06:00', congestion: 20 },
-  { time: '07:00', congestion: 45 },
-  { time: '08:00', congestion: 78 },
-  { time: '09:00', congestion: 92 },
-  { time: '10:00', congestion: 65 },
-  { time: '11:00', congestion: 55 },
-  { time: '12:00', congestion: 60 },
-  { time: '13:00', congestion: 50 },
-  { time: '14:00', congestion: 45 },
-  { time: '15:00', congestion: 55 },
-  { time: '16:00', congestion: 70 },
-  { time: '17:00', congestion: 88 },
-  { time: '18:00', congestion: 95 },
-  { time: '19:00', congestion: 75 },
-  { time: '20:00', congestion: 40 },
-  { time: '21:00', congestion: 25 },
-];
-
-const kpis = [
-  { label: 'AVG RESPONSE TIME', value: '3.2 MIN', change: '-12%', icon: Clock, positive: true },
-  { label: 'ACTIVE INCIDENTS', value: '14', change: '+3', icon: AlertTriangle, positive: false },
-  { label: 'VEHICLES DEPLOYED', value: '23', change: '+5', icon: Car, positive: true },
-  { label: 'GREEN CORRIDORS', value: '7', change: '+2', icon: Activity, positive: true },
-];
-
 export default function Analytics() {
   const { profile, signOut } = useAuth();
+  
+  const [kpis, setKpis] = useState([
+    { label: 'AVG RESPONSE TIME', value: '3.2 MIN', change: '-12%', icon: Clock, positive: true },
+    { label: 'ACTIVE INCIDENTS', value: '0', change: '+0', icon: AlertTriangle, positive: false },
+    { label: 'VEHICLES DEPLOYED', value: '0', change: '+0', icon: Car, positive: true },
+    { label: 'GREEN CORRIDORS', value: '0', change: '+0', icon: Activity, positive: true },
+  ]);
+
+  const [incidentData, setIncidentData] = useState<any[]>([]);
+  const [vehicleUtilData, setVehicleUtilData] = useState<any[]>([]);
+  const [trafficData, setTrafficData] = useState<any[]>([]);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+    libraries: ['places'] as any,
+  });
+
+  useEffect(() => {
+    const fetchSupabaseData = async () => {
+      const { data: iData } = await supabase.from('incidents').select('*');
+      const { data: vData } = await supabase.from('vehicles').select('*');
+      const { data: sData } = await supabase.from('traffic_signals').select('*');
+      
+      const rawIncidents = iData || [];
+      const rawVehicles = vData || [];
+      const rawSignals = sData || [];
+      
+      // KPI Calculation
+      const activeIncidents = rawIncidents.filter(i => !i.resolved_at).length;
+      const activeVehicles = rawVehicles.filter(v => v.status !== 'idle').length;
+      const corridors = rawSignals.filter(s => s.corridorActive).length; 
+
+      setKpis([
+        { label: 'AVG RESPONSE TIME', value: '3.2 MIN', change: '-12%', icon: Clock, positive: true },
+        { label: 'ACTIVE INCIDENTS', value: activeIncidents.toString(), change: `LIVE`, icon: AlertTriangle, positive: false },
+        { label: 'VEHICLES DEPLOYED', value: activeVehicles.toString(), change: `LIVE`, icon: Car, positive: true },
+        { label: 'GREEN CORRIDORS', value: corridors.toString(), change: `LIVE`, icon: Activity, positive: true },
+      ]);
+
+      // Categories
+      const counts: Record<string, number> = {};
+      rawIncidents.forEach(i => {
+         const t = i.type.toUpperCase();
+         counts[t] = (counts[t] || 0) + 1;
+      });
+      const indD = Object.entries(counts).map(([type, count]) => ({ type, count }));
+      setIncidentData(indD.length > 0 ? indD : [
+        { type: 'ACCIDENT', count: 0 },
+        { type: 'FIRE', count: 0 },
+        { type: 'MEDICAL', count: 0 },
+        { type: 'CONGESTION', count: 0 },
+        { type: 'ROADBLOCK', count: 0 }
+      ]);
+
+      // Vehicle Utilization by Live Status
+      const activeVCount = { ambulance: 0, fire: 0, police: 0 };
+      const standbyVCount = { ambulance: 0, fire: 0, police: 0 };
+      
+      rawVehicles.forEach(v => {
+         if (v.status === 'idle') {
+           if (v.type in standbyVCount) (standbyVCount as any)[v.type]++;
+         } else {
+           if (v.type in activeVCount) (activeVCount as any)[v.type]++;
+         }
+      });
+      
+      setVehicleUtilData([
+         { status: 'ON-DUTY', ...activeVCount },
+         { status: 'STANDBY', ...standbyVCount }
+      ]);
+    };
+    
+    fetchSupabaseData();
+    const interval = setInterval(fetchSupabaseData, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded || !window.google || !window.google.maps) return;
+    
+    const fetchTraffic = () => {
+      const service = new google.maps.DistanceMatrixService();
+      const origin = { lat: 28.6139, lng: 77.2090 }; // Center CP
+      const destinations = [
+        { lat: 28.6304, lng: 77.2177, name: 'CONNAUGHT PL' },
+        { lat: 28.5677, lng: 77.2100, name: 'AIIMS / SOUTH' },
+        { lat: 28.6921, lng: 77.1528, name: 'PITAMPURA' },
+        { lat: 28.6280, lng: 77.2760, name: 'LAXMI NAGAR' },
+        { lat: 28.5245, lng: 77.1855, name: 'QUTUB MINAR' }
+      ];
+      
+      service.getDistanceMatrix({
+        origins: [origin],
+        destinations: destinations.map(d => ({ lat: d.lat, lng: d.lng })),
+        travelMode: google.maps.TravelMode.DRIVING,
+        drivingOptions: { departureTime: new Date() }
+      }, (response, status) => {
+        if (status === 'OK' && response) {
+          const results = response.rows[0].elements;
+          const newZones = destinations.map((dest, i) => {
+            const el = results[i];
+            if (el.status === 'OK' && el.duration && el.duration_in_traffic) {
+               const nominal = el.duration.value;
+               const traffic = el.duration_in_traffic.value;
+               const congestionPercent = Math.round((traffic / nominal - 1) * 100);
+               return { sector: dest.name, congestion: Math.max(0, congestionPercent) };
+            }
+            return { sector: dest.name, congestion: 0 };
+          });
+          setTrafficData(newZones);
+        }
+      });
+    };
+
+    fetchTraffic();
+    const mapInterval = setInterval(fetchTraffic, 60000); // every minute
+    return () => clearInterval(mapInterval);
+  }, [isLoaded]);
 
   return (
     <div className="flex h-screen flex-col bg-slate-50 uppercase tracking-widest text-primary">
@@ -80,7 +157,7 @@ export default function Analytics() {
 
       <header className="flex h-20 shrink-0 items-center justify-between border-b-4 border-primary bg-white px-6 shadow-md">
         <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/dashboard" className="flex items-center gap-2">
             <img src={traffiqLogo} alt="Logo" className="h-12 w-auto object-contain" />
             <div className="flex flex-col">
               <span className="text-xl font-black leading-none text-primary">TRAFFIQ</span>
@@ -120,10 +197,10 @@ export default function Analytics() {
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
             {/* Charts Card */}
             {[
-              { title: 'RESPONSE TIME TREND', icon: TrendingUp, type: 'area', data: responseTimeData },
-              { title: 'INCIDENTS BY CATEGORY', icon: BarChart3, type: 'bar', data: incidentData },
-              { title: 'VEHICLE UTILIZATION', icon: Car, type: 'stack', data: vehicleUtilData },
-              { title: 'TRAFFIC PATTERNS', icon: Activity, type: 'area', data: trafficData },
+              { title: 'RESPONSE TIME TREND (MONTHLY)', icon: TrendingUp, type: 'area', data: responseTimeData },
+              { title: 'LIFETIME INCIDENTS BY CATEGORY', icon: BarChart3, type: 'bar', data: incidentData },
+              { title: 'LIVE VEHICLE STATUS', icon: Car, type: 'stack', data: vehicleUtilData },
+              { title: 'LIVE SECTOR CONGESTION (%)', icon: Activity, type: 'barTraffic', data: trafficData },
             ].map((chart, i) => (
               <div key={chart.title} className="bg-white border-2 border-primary/10 p-6 shadow-lg">
                 <h3 className="mb-6 flex items-center gap-3 text-xs font-black tracking-widest text-primary">
@@ -133,17 +210,25 @@ export default function Analytics() {
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     {chart.type === 'bar' ? (
-                      <BarChart data={incidentData}>
+                      <BarChart data={chart.data}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
                         <XAxis dataKey="type" tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
                         <YAxis tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
                         <Tooltip />
                         <Bar dataKey="count" fill="#003366" radius={[4, 4, 0, 0]} />
                       </BarChart>
-                    ) : chart.type === 'stack' ? (
-                      <BarChart data={vehicleUtilData}>
+                    ) : chart.type === 'barTraffic' ? (
+                      <BarChart data={chart.data}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                        <XAxis dataKey="hour" tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
+                        <XAxis dataKey="sector" tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
+                        <YAxis tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} tickFormatter={(v) => `${v}%`} />
+                        <Tooltip />
+                        <Bar dataKey="congestion" fill="#0055AA" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    ) : chart.type === 'stack' ? (
+                      <BarChart data={chart.data}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                        <XAxis dataKey="status" tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
                         <YAxis tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
                         <Tooltip />
                         <Bar dataKey="ambulance" stackId="a" fill="#003366" />
@@ -153,7 +238,7 @@ export default function Analytics() {
                     ) : (
                       <AreaChart data={chart.data}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                        <XAxis dataKey={chart.data === trafficData ? 'time' : 'month'} tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
+                        <XAxis dataKey="month" tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
                         <YAxis tick={{ fill: '#003366', fontSize: 10, fontWeight: 900 }} />
                         <Tooltip />
                         <defs>
@@ -162,7 +247,7 @@ export default function Analytics() {
                             <stop offset="95%" stopColor="#003366" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <Area type="monotone" dataKey={chart.data === trafficData ? 'congestion' : 'avg'} stroke="#003366" strokeWidth={3} fill={`url(#grad-${i})`} />
+                        <Area type="monotone" dataKey="avg" stroke="#003366" strokeWidth={3} fill={`url(#grad-${i})`} />
                       </AreaChart>
                     )}
                   </ResponsiveContainer>

@@ -372,6 +372,26 @@ export default function DriverDashboard() {
     return `${(meters / 1000).toFixed(1)} KM`;
   };
 
+  useEffect(() => {
+    if (!myVehicle) return;
+    
+    // Listen for Admin/Global auto-resolves targeting this vehicle
+    const vehicleSync = supabase.channel(`vehicle-sync-${myVehicle.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vehicles', filter: `id=eq.${myVehicle.id}` }, (payload) => {
+        if (payload.new.status === 'idle' && status !== 'idle') {
+          setStatus('idle');
+          setDirections(null);
+          setCurrentRouteId(null);
+          toast.success("ACTIVE MISSION TIME-TO-LIVE REACHED. ARCHIVED SECURELY.");
+        }
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(vehicleSync);
+    };
+  }, [myVehicle, status]);
+
   const handleStartMission = async () => {
     if (selectedVehicle && destinationCoords) {
       setStatus('en-route');
