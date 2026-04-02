@@ -220,7 +220,17 @@ export default function DriverDashboard() {
 
     fetchData();
 
-    const iSub = supabase.channel('incidents-driver').on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, fetchData).subscribe();
+    const iSub = supabase.channel('incidents-driver').on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, (payload) => {
+      if (payload.eventType === 'INSERT') {
+        const inc = payload.new;
+        toast('🚨 TACTICAL ROUTE INTERRUPTION', {
+          description: `SEVERE ${inc.type?.toUpperCase()} IN ${inc.location_name?.toUpperCase() || 'PROXIMITY'}. SCANNING FOR ALTERNATIVE ROUTES...`,
+          style: { background: '#ef4444', color: '#fff', border: 'none', fontWeight: 'bold' },
+          duration: 10000
+        });
+      }
+      fetchData();
+    }).subscribe();
     const sSub = supabase.channel('signals-driver').on('postgres_changes', { event: '*', schema: 'public', table: 'traffic_signals' }, fetchData).subscribe();
 
     const cronTimer = setInterval(fetchData, 60000);
@@ -298,8 +308,12 @@ export default function DriverDashboard() {
 
             const selectedBlocks = routeAnalysis[bestRouteIndex];
             setRouteBlocks(selectedBlocks);
+            
+            const optimizedResult = Object.assign({}, result);
+            (optimizedResult as any).routeIndex = bestRouteIndex;
+            setDirections(optimizedResult);
+            
             const optimizedRoute = result.routes[bestRouteIndex];
-            setDirections({ ...result, routes: [optimizedRoute] });
             
             const leg = optimizedRoute.legs[0];
             if (leg) {

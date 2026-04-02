@@ -208,6 +208,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
         {directions && (
           <DirectionsRenderer
             directions={directions}
+            routeIndex={(directions as any).routeIndex || 0}
             options={{
               polylineOptions: {
                 strokeColor: '#0000FF',

@@ -175,7 +175,15 @@ export default function CitizenDashboard() {
     // Subscribe to real-time updates
     const incidentsSubscription = supabase
       .channel('incidents-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const inc = payload.new;
+          toast('⚠️ PUBLIC SAFETY ADVISORY', {
+            description: `${inc.type?.toUpperCase()} HAZARD DETECTED IN ${inc.location_name?.toUpperCase() || 'SECTOR'}. PLEASE EXERCISE CAUTION.`,
+            style: { background: '#f59e0b', color: '#fff', border: 'none', fontWeight: 'bold' },
+            duration: 8000
+          });
+        }
         fetchData();
       })
       .subscribe();
@@ -250,7 +258,9 @@ export default function CitizenDashboard() {
       const blocksFound = routeAnalysis[bestRouteIndex];
 
       setRouteBlocks(blocksFound);
-      setDirections({ ...result, routes: [result.routes[bestRouteIndex]] });
+      const optimizedResult = Object.assign({}, result);
+      (optimizedResult as any).routeIndex = bestRouteIndex;
+      setDirections(optimizedResult);
 
       const leg = result.routes[bestRouteIndex].legs[0];
       const distValue = leg.distance?.value || 0;

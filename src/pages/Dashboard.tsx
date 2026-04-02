@@ -200,7 +200,17 @@ export default function Dashboard() {
 
     const vSub = supabase.channel('v-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, fetchData).subscribe();
     const sSub = supabase.channel('s-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'traffic_signals' }, fetchData).subscribe();
-    const iSub = supabase.channel('i-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, fetchData).subscribe();
+    const iSub = supabase.channel('i-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, (payload) => {
+      if (payload.eventType === 'INSERT') {
+        const inc = payload.new;
+        toast('🚨 EMERGENCY BROADCAST', {
+          description: `NEW ${inc.type?.toUpperCase()} INCIDENT REPORTED NEAR ${inc.location_name?.toUpperCase() || 'UNKNOWN TACTICAL SECTOR'}.`,
+          style: { background: '#ef4444', color: '#fff', border: 'none', fontWeight: 'bold' },
+          duration: 8000
+        });
+      }
+      fetchData();
+    }).subscribe();
     const pSub = supabase.channel('p-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchDrivers).subscribe();
     const rSub = supabase.channel('routes-channel').on('postgres_changes', { event: '*', schema: 'public', table: 'routes' }, fetchData).subscribe();
     
