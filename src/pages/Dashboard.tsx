@@ -485,7 +485,7 @@ export default function Dashboard() {
                 <div className="sticky top-0 bg-primary px-4 py-2 font-black text-[10px] text-white">
                   ACTIVE PRIORITY UNITS
                 </div>
-                {vehicles.map(v => (
+                {activeVehicles.map(v => (
                   <button
                     key={v.id}
                     onClick={() => { setSelectedVehicle(v.id); setSelectedIncident(null); }}
@@ -678,7 +678,7 @@ export default function Dashboard() {
         <main className="relative flex-1 bg-white overflow-hidden">
           <MapContainer
             incidents={incidents as any}
-            vehicles={vehicles as any}
+            vehicles={activeVehicles as any}
             signals={signals as any}
             selectedIncident={selectedInc}
             setSelectedIncident={(inc) => setSelectedIncident(inc?.id || null)}
