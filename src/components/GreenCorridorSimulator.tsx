@@ -27,6 +27,26 @@ function getDistance(p1: { lat: number; lng: number }, p2: { lat: number; lng: n
   return R * c;
 }
 
+function getPointOnPath(path: any[], progress: number) {
+  if (!path || path.length === 0) return { lat: 0, lng: 0 };
+  const maxIndex = path.length - 1;
+  if (progress <= 0) return path[0];
+  if (progress >= 1) return path[maxIndex];
+
+  const currentFloatIndex = progress * maxIndex;
+  const currentIndex = Math.floor(currentFloatIndex);
+  const nextIndex = Math.min(currentIndex + 1, maxIndex);
+  const segmentProgress = currentFloatIndex - currentIndex;
+
+  const p1 = path[currentIndex];
+  const p2 = path[nextIndex];
+
+  return {
+    lat: p1.lat + (p2.lat - p1.lat) * segmentProgress,
+    lng: p1.lng + (p2.lng - p1.lng) * segmentProgress,
+  };
+}
+
 export default function GreenCorridorSimulator({ onClose, baseSignals, baseIncidents, userLocation }: GreenCorridorSimulatorProps) {
   const [activeRoutes, setActiveRoutes] = useState<any[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<any | null>(null);
@@ -66,30 +86,46 @@ export default function GreenCorridorSimulator({ onClose, baseSignals, baseIncid
     // Create random civilian cars near the route area
     const path = selectedRoute.path;
     if (!path || path.length === 0) return;
+    const civilians = Array.from({ length: 40 }).map((_, i) => {
+      const progress = Math.random();
+      const pos = getPointOnPath(path, progress);
+      // Give them some offset so they don't look exactly on the same thin line
+      const latOffset = (Math.random() - 0.5) * 0.0003;
+      const lngOffset = (Math.random() - 0.5) * 0.0003;
+      
+      return {
+        id: `CIV-${i}`,
+        type: 'civilian',
+        status: 'idle',
+        speed: (Math.random() * 0.5 + 0.1) * 0.0002, // realistic slow city speed
+        progress: progress,
+        direction: Math.random() > 0.5 ? 1 : -1,
+        latOffset,
+        lngOffset,
+        position: { lat: pos.lat + latOffset, lng: pos.lng + lngOffset },
+        lat: pos.lat + latOffset,
+        lng: pos.lng + lngOffset,
+      };
+    });
     
-    const centerLat = path[Math.floor(path.length / 2)].lat;
-    const centerLng = path[Math.floor(path.length / 2)].lng;
+    const ev = {
+      id: selectedRoute.vehicle_id || 'SIM-EV',
+      type: 'ambulance',
+      callsign: selectedRoute.vehicles?.callsign || 'SIM-EV',
+      status: 'en-route',
+      speed: 0,
+      position: { lat: path[0].lat, lng: path[0].lng },
+      lat: path[0].lat,
+      lng: path[0].lng
+    };
     
-    const civilians = Array.from({ length: 40 }).map((_, i) => ({
-      id: `CIV-${i}`,
-      type: 'civilian',
-      status: 'idle',
-      speed: Math.random() * 40 + 20,
-      position: {
-        lat: centerLat + (Math.random() - 0.5) * 0.05,
-        lng: centerLng + (Math.random() - 0.5) * 0.05
-      },
-      lat: centerLat + (Math.random() - 0.5) * 0.05,
-      lng: centerLng + (Math.random() - 0.5) * 0.05,
-    }));
-    
-    setSimVehicles(civilians);
+    setSimVehicles([ev, ...civilians]);
     setSimSignals(baseSignals);
     setProgress(0);
     setTimeRemaining(180);
     setIsCorridorActive(false);
     setIsPlaying(false);
-  }, [selectedRoute, baseSignals]);
+  }, [selectedRoute]);
 
   const togglePlay = () => {
     setIsPlaying(prev => !prev);
@@ -135,11 +171,12 @@ export default function GreenCorridorSimulator({ onClose, baseSignals, baseIncid
 
   // Update simulator state per frame
   useEffect(() => {
-    if (!selectedRoute || !selectedRoute.path || selectedRoute.path.length === 0) return;
+    if (!selectedRoute || !selectedRoute.path || selectedRoute.path.length < 2) return;
     
     const path = selectedRoute.path;
     const totalSegments = path.length - 1;
-    const currentFloatIndex = progress * totalSegments;
+    const safeProgress = Math.max(0, Math.min(1, progress));
+    const currentFloatIndex = safeProgress * totalSegments;
     const currentIndex = Math.min(Math.floor(currentFloatIndex), totalSegments - 1);
     const nextIndex = Math.min(currentIndex + 1, totalSegments);
     const segmentProgress = currentFloatIndex - currentIndex;
@@ -180,16 +217,46 @@ export default function GreenCorridorSimulator({ onClose, baseSignals, baseIncid
         } else {
           return { ...sig, state: 'red', corridorActive: false };
         }
+      } else {
+        // Normal randomized traffic cycle
+        const phase = Math.floor(timeRemaining / 5) % 3;
+        const states = ['green', 'yellow', 'red'];
+        const charCode = (sig.id && typeof sig.id === 'string') ? sig.id.charCodeAt(0) : 0;
+        const sigPhase = (phase + (charCode % 3)) % 3;
+        return { ...sig, state: states[sigPhase], corridorActive: false };
       }
-      return sig;
     });
 
-    // Update civilians (just give them a gentle random jiggle to look alive)
-    const updatedCivilians = simVehicles.filter(v => v.type === 'civilian').map(v => ({
-      ...v,
-      lat: v.lat + (Math.random() - 0.5) * 0.0001,
-      lng: v.lng + (Math.random() - 0.5) * 0.0001,
-    }));
+    // Update civilians
+    const updatedCivilians = simVehicles.filter(v => v.type === 'civilian').map(v => {
+      if (shouldCorridorBeActive) {
+        // Halt completely when ambulance is coming
+        return v;
+      }
+
+      // Move along the path otherwise
+      let newProgress = v.progress + (v.direction * v.speed);
+      let newDirection = v.direction;
+      
+      if (newProgress > 1) {
+        newProgress = 1;
+        newDirection = -1;
+      } else if (newProgress < 0) {
+        newProgress = 0;
+        newDirection = 1;
+      }
+
+      const pos = getPointOnPath(path, newProgress);
+
+      return {
+        ...v,
+        progress: newProgress,
+        direction: newDirection,
+        position: { lat: pos.lat + v.latOffset, lng: pos.lng + v.lngOffset },
+        lat: pos.lat + v.latOffset,
+        lng: pos.lng + v.lngOffset,
+      };
+    });
 
     setSimVehicles([ev, ...updatedCivilians]);
     setSimSignals(newSignals);

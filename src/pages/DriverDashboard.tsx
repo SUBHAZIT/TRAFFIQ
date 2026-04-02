@@ -191,7 +191,7 @@ export default function DriverDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       const { data: sData } = await supabase.from('traffic_signals').select('*');
-      const { data: iData } = await supabase.from('incidents').select('*');
+      const { data: iData } = await supabase.from('incidents').select('*').is('resolved_at', null);
       
       let fetchedSignals = (sData || []) as any[];
       let fetchedIncidents = (iData || []) as any[];
@@ -223,9 +223,12 @@ export default function DriverDashboard() {
     const iSub = supabase.channel('incidents-driver').on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, fetchData).subscribe();
     const sSub = supabase.channel('signals-driver').on('postgres_changes', { event: '*', schema: 'public', table: 'traffic_signals' }, fetchData).subscribe();
 
+    const cronTimer = setInterval(fetchData, 60000);
+
     return () => {
       iSub.unsubscribe();
       sSub.unsubscribe();
+      clearInterval(cronTimer);
     };
   }, []);
 

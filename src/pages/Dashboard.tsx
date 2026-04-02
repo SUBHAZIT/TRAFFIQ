@@ -11,7 +11,8 @@ import traffiqLogo from '@/assets/TRAFFIQ LOGO.png';
 import MapContainer from '@/components/MapContainer';
 import GreenCorridorSimulator from '@/components/GreenCorridorSimulator';
 
-
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
+import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
 function getDistance(p1: { lat: number, lng: number }, p2: { lat: number, lng: number }) {
   const R = 6371e3; // metres
@@ -47,8 +48,9 @@ export default function Dashboard() {
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
   const [showSimulator, setShowSimulator] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
   const [time, setTime] = useState(new Date());
-  const [activeTab, setActiveTab] = useState<'units' | 'verification' | 'alerts' | 'history'>('units');
+  const [activeTab, setActiveTab] = useState<'units' | 'verification' | 'alerts' | 'history' | 'analytics'>('units');
   const [verifTab, setVerifTab] = useState<'pending' | 'verified'>('pending');
   const [pendingDrivers, setPendingDrivers] = useState<any[]>([]);
   const [verifiedDrivers, setVerifiedDrivers] = useState<any[]>([]);
@@ -59,6 +61,10 @@ export default function Dashboard() {
   const [livePaths, setLivePaths] = useState<{ id: string; path: { lat: number; lng: number }[]; color: string; eta?: string }[]>([]);
   const [pastRoutes, setPastRoutes] = useState<any[]>([]);
   const [eta, setEta] = useState<string>('CALCULATING...');
+  
+  // ANALYTICS STATE
+  const [zoneTraffic, setZoneTraffic] = useState<any[]>([]);
+  const [busyZone, setBusyZone] = useState<{ name: string; delay: number } | null>(null);
 
 
   const fetchDrivers = useCallback(async () => {
@@ -101,7 +107,7 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     const { data: vData } = await supabase.from('vehicles').select('*');
     const { data: sData } = await supabase.from('traffic_signals').select('*');
-    const { data: iData } = await supabase.from('incidents').select('*');
+    const { data: iData } = await supabase.from('incidents').select('*').is('resolved_at', null);
     const { data: rData } = await supabase.from('routes').select('*').eq('active', true);
     const { data: hData } = await supabase.from('routes').select(`
       *,
@@ -139,6 +145,7 @@ export default function Dashboard() {
       .filter(inc => !inc.resolved_at && (inc.severity === 'critical' || inc.severity === 'high'))
       .map(inc => ({
         id: `db-${inc.id}`,
+        rawId: inc.id,
         message: `${inc.type.toUpperCase()}: ${inc.description.toUpperCase()}`,
         location: (inc as any).location_name || `SECTOR ${Math.floor(inc.lat)}.${Math.floor(inc.lng)}`,
         time: `${Math.round((Date.now() - new Date(inc.created_at).getTime()) / 60000)}M AGO`,
@@ -195,7 +202,10 @@ export default function Dashboard() {
     const sSub = supabase.channel('s-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'traffic_signals' }, fetchData).subscribe();
     const iSub = supabase.channel('i-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, fetchData).subscribe();
     const pSub = supabase.channel('p-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchDrivers).subscribe();
-    const rSub = supabase.channel('r-admin').on('postgres_changes', { event: '*', schema: 'public', table: 'routes' }, fetchData).subscribe();
+    const rSub = supabase.channel('routes-channel').on('postgres_changes', { event: '*', schema: 'public', table: 'routes' }, fetchData).subscribe();
+    
+    // Add interval to forcefully trigger the auto-resolve garbage collection every minute
+    const cronLoop = setInterval(fetchData, 60000);
 
     return () => {
       vSub.unsubscribe();
@@ -203,6 +213,7 @@ export default function Dashboard() {
       iSub.unsubscribe();
       pSub.unsubscribe();
       rSub.unsubscribe();
+      clearInterval(cronLoop);
     };
   }, [fetchData, fetchDrivers]);
 
@@ -231,6 +242,89 @@ export default function Dashboard() {
 
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+
+  useEffect(() => {
+    // Traffic Zone Polling every 5 mins
+    const checkTraffic = () => {
+      if (!window.google || !window.google.maps) return;
+      
+      const service = new google.maps.DistanceMatrixService();
+      
+      const origin = { lat: 28.6139, lng: 77.2090 }; // Central Ref
+      const destinations = [
+        { lat: 28.6304, lng: 77.2177, name: 'CONNAUGHT PLACE (C)' },
+        { lat: 28.5677, lng: 77.2100, name: 'AIIMS / SOUTH (S)' },
+        { lat: 28.6921, lng: 77.1528, name: 'PITAMPURA (N)' },
+        { lat: 28.6280, lng: 77.2760, name: 'LAXMI NAGAR (E)' }
+      ];
+
+      service.getDistanceMatrix({
+        origins: [origin],
+        destinations: destinations.map(d => ({ lat: d.lat, lng: d.lng })),
+        travelMode: google.maps.TravelMode.DRIVING,
+        drivingOptions: {
+          departureTime: new Date(), // needed for traffic data
+        }
+      }, (response, status) => {
+        if (status === 'OK' && response) {
+          const results = response.rows[0].elements;
+          let mostBusy = { name: 'CALCULATING...', ratio: 0, delayMin: 0 };
+          
+          const newZones = destinations.map((dest, i) => {
+            const el = results[i];
+            if (el.status === 'OK' && el.duration && el.duration_in_traffic) {
+              const dur = el.duration.value;
+              const durTraffic = el.duration_in_traffic.value;
+              const ratio = durTraffic / dur;
+              const delayMin = Math.round((durTraffic - dur) / 60);
+              
+              if (ratio > mostBusy.ratio) {
+                mostBusy = { name: dest.name.split(' ')[0], ratio, delayMin };
+              }
+              
+              return {
+                name: dest.name.split(' ')[0], 
+                nominal: Math.round(dur/60), 
+                traffic: Math.round(durTraffic/60),
+                congestionRatio: ratio
+              };
+            }
+            return { name: dest.name.split(' ')[0], nominal: 0, traffic: 0, congestionRatio: 0 };
+          });
+
+          if (mostBusy.ratio > 0) {
+            setBusyZone({ name: mostBusy.name, delay: mostBusy.delayMin });
+          }
+          setZoneTraffic(newZones);
+        }
+      });
+    };
+
+    // Delay initial check slightly to ensure Google Maps is loaded from MapContainer
+    const initTimer = setTimeout(checkTraffic, 3000);
+    const interval = setInterval(checkTraffic, 5 * 60 * 1000); // 5 mins
+    
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+    };
+    checkTraffic();
+  }, []);
+
+  const handleResolveIncident = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('incidents')
+        .update({ resolved_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+      toast.success("INCIDENT OFFICIALLY RESOLVED");
+      fetchData(); // Immediately refresh the matrix
+    } catch (err: any) {
+      console.error(err);
+      toast.error("FAILED TO RESOLVE INCIDENT");
+    }
+  };
 
   const activeVehicles = vehicles.filter(v => v.status !== 'idle');
   const selected = selectedVehicle ? vehicles.find(v => v.id === selectedVehicle) : null;
@@ -266,6 +360,13 @@ export default function Dashboard() {
             <Radio className="h-3.5 w-3.5 text-blue-600 animate-pulse" />
             <span className="text-xs font-black text-blue-600">LIVE FEED</span>
           </div>
+          <button
+            onClick={() => setShowAnalytics(true)}
+            className="flex items-center gap-2 rounded border-2 border-primary/20 px-3 py-1.5 text-xs font-bold transition-all hover:bg-primary hover:text-white"
+          >
+            <BarChart3 className="h-3 w-3" />
+            ANALYTICS
+          </button>
           <button
             onClick={() => setShowSimulator(true)}
             className="flex items-center gap-2 rounded border-2 border-primary/20 px-3 py-1.5 text-xs font-bold transition-all hover:bg-primary hover:text-white"
@@ -438,7 +539,17 @@ export default function Dashboard() {
                         <MapPin className="h-2 w-2" />
                         <span className="text-[8px] font-bold uppercase">{alert.location}</span>
                       </div>
-                      <div className="text-[8px] font-bold text-primary/40 uppercase">STRATEGIC STATUS: {alert.time}</div>
+                      <div className="flex justify-between items-center mt-2">
+                        <div className="text-[8px] font-bold text-primary/40 uppercase">STRATEGIC STATUS: {alert.time}</div>
+                        {alert.source === 'SYSTEM' && (
+                          <button
+                            onClick={() => handleResolveIncident(alert.rawId)}
+                            className="bg-white border-2 border-red-500 text-red-600 px-3 py-1 text-[8px] font-black hover:bg-red-500 hover:text-white transition-colors"
+                          >
+                            RESOLVE
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {unifiedAlerts.length === 0 && (
@@ -601,6 +712,15 @@ export default function Dashboard() {
                 onClose={() => setShowSimulator(false)} 
                 baseSignals={signals} 
                 baseIncidents={incidents} 
+                userLocation={userLocation}
+              />
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {showAnalytics && (
+              <AnalyticsDashboard 
+                onClose={() => setShowAnalytics(false)} 
+                liveData={{ unifiedAlerts, vehicles, incidents }} 
                 userLocation={userLocation}
               />
             )}

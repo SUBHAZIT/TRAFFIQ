@@ -186,9 +186,13 @@ export default function CitizenDashboard() {
       })
       .subscribe();
 
+    // Force periodic incident cleanup checks locally every minute
+    const cronTimer = setInterval(fetchData, 60000);
+
     return () => {
       incidentsSubscription.unsubscribe();
       vehiclesSubscription.unsubscribe();
+      clearInterval(cronTimer);
       if (watchId) navigator.geolocation.clearWatch(watchId);
     };
   }, []);
