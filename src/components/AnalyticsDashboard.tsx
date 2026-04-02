@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, Play, Pause, Bus, Car, Truck, CheckCircle2, Navigation, AlertCircle, X, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ChevronDown, CheckCircle2, AlertCircle, X, Clock } from 'lucide-react';
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
   ComposedChart, Line
@@ -7,63 +7,9 @@ import {
 import { 
   GoogleMap, useJsApiLoader, Polyline, Marker, InfoWindow, Circle 
 } from '@react-google-maps/api';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-// --- MOCK DATA ---
-const EVENTS = [
-  {
-    id: 1,
-    title: 'CENTRAL ARTERY → NORTHERN SECTOR',
-    time: '06:27 - 09:25',
-    active: true,
-    resolved: false,
-    stats: [
-      { icon: <Bus className="h-3 w-3"/>, val: 97, color: 'bg-teal-500' },
-      { icon: <Car className="h-3 w-3"/>, val: 197, color: 'bg-red-500' },
-      { icon: <Truck className="h-3 w-3"/>, val: 198, color: 'bg-red-600' },
-      { label: 'ALL', val: 963, color: 'bg-slate-700' }
-    ]
-  },
-  {
-    id: 2,
-    title: 'WESTERN DIVIDE → PERIPHERAL',
-    time: '09:12 - 10:39',
-    active: false,
-    resolved: false,
-    stats: [
-      { icon: <Bus className="h-3 w-3"/>, val: 97, color: 'bg-teal-500' },
-      { icon: <Car className="h-3 w-3"/>, val: 197, color: 'bg-red-500' },
-      { icon: <Truck className="h-3 w-3"/>, val: 198, color: 'bg-red-600' },
-      { label: 'ALL', val: 963, color: 'bg-slate-700' }
-    ]
-  },
-  {
-    id: 3,
-    title: 'TECH PARK → SOUTHERN BYPASS',
-    time: '16:11 - 16:39',
-    active: false,
-    resolved: true,
-    stats: [
-      { icon: <Bus className="h-3 w-3"/>, val: 97, color: 'bg-teal-500' },
-      { icon: <Car className="h-3 w-3"/>, val: 197, color: 'bg-red-500' },
-      { icon: <Truck className="h-3 w-3"/>, val: 198, color: 'bg-red-600' },
-      { label: 'ALL', val: 963, color: 'bg-slate-700' }
-    ]
-  },
-  {
-    id: 4,
-    title: 'INDUSTRIAL BLOCK → HIGHWAY 4',
-    time: '16:31 - 17:12',
-    active: false,
-    resolved: true,
-    stats: [
-      { icon: <Bus className="h-3 w-3"/>, val: 97, color: 'bg-teal-500' },
-      { icon: <Car className="h-3 w-3"/>, val: 197, color: 'bg-red-500' },
-      { label: 'ALL', val: 563, color: 'bg-slate-700' }
-    ]
-  }
-];
-
+// --- MOCK CONSTANTS FOR CHARTS ---
 const SPEED_FREQ_DATA = Array.from({length: 15}).map((_, i) => ({
   speed: i * 5,
   freq: Math.random() * 0.4,
@@ -81,8 +27,6 @@ const TIME_CHART_DATA = Array.from({length: 10}).map((_, i) => {
   }
 });
 
-// --- COMPONENTS ---
-
 export default function AnalyticsDashboard({ onClose, liveData, userLocation }: { onClose: () => void, liveData?: any, userLocation?: { lat: number, lng: number } | null }) {
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -93,10 +37,9 @@ export default function AnalyticsDashboard({ onClose, liveData, userLocation }: 
   const [currentDate, setCurrentDate] = useState(new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }));
   const [currentTime, setCurrentTime] = useState(new Date());
   const [mapCenter, setMapCenter] = useState(userLocation || { lat: 22.5726, lng: 88.3639 });
-  const [playbackProgress, setPlaybackProgress] = useState(30);
 
-  const [realEvents, setRealEvents] = useState<any[]>(EVENTS);
-  const [activeEvent, setActiveEvent] = useState<any>(EVENTS[0]);
+  const [realEvents, setRealEvents] = useState<any[]>([]);
+  const [activeEvent, setActiveEvent] = useState<any>(null);
 
   useEffect(() => {
     if (userLocation) setMapCenter(userLocation);

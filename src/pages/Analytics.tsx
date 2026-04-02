@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, ArrowLeft, Activity, AlertTriangle, Car, Clock, TrendingUp, BarChart3, LogOut, Building2 } from 'lucide-react';
+import { Activity, AlertTriangle, Car, Clock, TrendingUp, BarChart3, LogOut, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import traffiqLogo from '@/assets/TRAFFIQ LOGO.png';
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart
 } from 'recharts';
 import { useJsApiLoader } from '@react-google-maps/api';
@@ -22,7 +22,7 @@ const responseTimeData = [
 
 export default function Analytics() {
   const { profile, signOut } = useAuth();
-  
+
   const [kpis, setKpis] = useState([
     { label: 'AVG RESPONSE TIME', value: '3.2 MIN', change: '-12%', icon: Clock, positive: true },
     { label: 'ACTIVE INCIDENTS', value: '0', change: '+0', icon: AlertTriangle, positive: false },
@@ -45,15 +45,15 @@ export default function Analytics() {
       const { data: iData } = await supabase.from('incidents').select('*');
       const { data: vData } = await supabase.from('vehicles').select('*');
       const { data: sData } = await supabase.from('traffic_signals').select('*');
-      
+
       const rawIncidents = iData || [];
       const rawVehicles = vData || [];
       const rawSignals = sData || [];
-      
+
       // KPI Calculation
       const activeIncidents = rawIncidents.filter(i => !i.resolved_at).length;
       const activeVehicles = rawVehicles.filter(v => v.status !== 'idle').length;
-      const corridors = rawSignals.filter(s => s.corridorActive).length; 
+      const corridors = rawSignals.filter(s => s.corridorActive).length;
 
       setKpis([
         { label: 'AVG RESPONSE TIME', value: '3.2 MIN', change: '-12%', icon: Clock, positive: true },
@@ -65,8 +65,8 @@ export default function Analytics() {
       // Categories
       const counts: Record<string, number> = {};
       rawIncidents.forEach(i => {
-         const t = i.type.toUpperCase();
-         counts[t] = (counts[t] || 0) + 1;
+        const t = i.type.toUpperCase();
+        counts[t] = (counts[t] || 0) + 1;
       });
       const indD = Object.entries(counts).map(([type, count]) => ({ type, count }));
       setIncidentData(indD.length > 0 ? indD : [
@@ -80,21 +80,21 @@ export default function Analytics() {
       // Vehicle Utilization by Live Status
       const activeVCount = { ambulance: 0, fire: 0, police: 0 };
       const standbyVCount = { ambulance: 0, fire: 0, police: 0 };
-      
+
       rawVehicles.forEach(v => {
-         if (v.status === 'idle') {
-           if (v.type in standbyVCount) (standbyVCount as any)[v.type]++;
-         } else {
-           if (v.type in activeVCount) (activeVCount as any)[v.type]++;
-         }
+        if (v.status === 'idle') {
+          if (v.type in standbyVCount) (standbyVCount as any)[v.type]++;
+        } else {
+          if (v.type in activeVCount) (activeVCount as any)[v.type]++;
+        }
       });
-      
+
       setVehicleUtilData([
-         { status: 'ON-DUTY', ...activeVCount },
-         { status: 'STANDBY', ...standbyVCount }
+        { status: 'ON-DUTY', ...activeVCount },
+        { status: 'STANDBY', ...standbyVCount }
       ]);
     };
-    
+
     fetchSupabaseData();
     const interval = setInterval(fetchSupabaseData, 15000);
     return () => clearInterval(interval);
@@ -102,7 +102,7 @@ export default function Analytics() {
 
   useEffect(() => {
     if (!isLoaded || !window.google || !window.google.maps) return;
-    
+
     const fetchTraffic = () => {
       const service = new google.maps.DistanceMatrixService();
       const origin = { lat: 28.6139, lng: 77.2090 }; // Center CP
@@ -113,7 +113,7 @@ export default function Analytics() {
         { lat: 28.6280, lng: 77.2760, name: 'LAXMI NAGAR' },
         { lat: 28.5245, lng: 77.1855, name: 'QUTUB MINAR' }
       ];
-      
+
       service.getDistanceMatrix({
         origins: [origin],
         destinations: destinations.map(d => ({ lat: d.lat, lng: d.lng })),
@@ -125,10 +125,10 @@ export default function Analytics() {
           const newZones = destinations.map((dest, i) => {
             const el = results[i];
             if (el.status === 'OK' && el.duration && el.duration_in_traffic) {
-               const nominal = el.duration.value;
-               const traffic = el.duration_in_traffic.value;
-               const congestionPercent = Math.round((traffic / nominal - 1) * 100);
-               return { sector: dest.name, congestion: Math.max(0, congestionPercent) };
+              const nominal = el.duration.value;
+              const traffic = el.duration_in_traffic.value;
+              const congestionPercent = Math.round((traffic / nominal - 1) * 100);
+              return { sector: dest.name, congestion: Math.max(0, congestionPercent) };
             }
             return { sector: dest.name, congestion: 0 };
           });
