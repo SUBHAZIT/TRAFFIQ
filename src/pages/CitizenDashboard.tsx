@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, AlertTriangle, MapPin, Bell, Car, LogOut, Plus, Radio, Eye, Building2, Loader2, Search, Navigation, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link, useNavigate } from 'react-router-dom';
@@ -40,6 +40,7 @@ export default function CitizenDashboard() {
   const [progress, setProgress] = useState(0);
   const [totalDistance, setTotalDistance] = useState<number | null>(null);
   const [googleAlerts, setGoogleAlerts] = useState<any[]>([]);
+  const [showMobileAlerts, setShowMobileAlerts] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -603,6 +604,18 @@ export default function CitizenDashboard() {
                       {isRouting ? <Loader2 className="h-6 w-6 animate-spin" /> : <Search className="h-6 w-6" />}
                     </button>
                   </div>
+                  {directions && !isJourneyStarted && (
+                    <button
+                      onClick={() => {
+                        setIsJourneyStarted(true);
+                        toast.success("JOURNEY PROTOCOL INITIALIZED");
+                      }}
+                      className="w-full mt-2 bg-primary text-white py-3 font-black text-xs tracking-[0.2em] shadow-xl border-2 border-white flex items-center justify-center gap-2"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      START JOURNEY
+                    </button>
+                  )}
                 </div>
 
                 {/* Mobile Journey HUD */}
@@ -635,7 +648,7 @@ export default function CitizenDashboard() {
                   <button onClick={() => toast.info(`Current Sector: ${sector.toUpperCase()}`)} className="h-14 w-14 rounded-full bg-white shadow-[0_10px_20px_rgba(0,0,0,0.2)] border-2 border-primary flex flex-col items-center justify-center text-primary">
                     <Navigation className="h-5 w-5 mb-0.5" />
                   </button>
-                  <button onClick={() => window.location.reload()} className="h-14 w-14 rounded-full bg-white shadow-[0_10px_20px_rgba(0,0,0,0.2)] border-2 border-primary flex items-center justify-center text-primary relative">
+                  <button onClick={() => setShowMobileAlerts(true)} className="h-14 w-14 rounded-full bg-white shadow-[0_10px_20px_rgba(0,0,0,0.2)] border-2 border-primary flex items-center justify-center text-primary relative">
                     <Bell className="h-6 w-6" />
                     {unifiedAlerts.length > 0 && <span className="absolute top-0 right-0 h-4 w-4 bg-red-500 rounded-full border-2 border-white animate-pulse" />}
                   </button>
@@ -651,6 +664,54 @@ export default function CitizenDashboard() {
                     REPORT LIVE INCIDENT
                   </Link>
                 </div>
+
+                {/* Mobile Alerts Modal */}
+                <AnimatePresence>
+                  {showMobileAlerts && (
+                    <motion.div
+                      initial={{ opacity: 0, y: "100%" }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: "100%" }}
+                      transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                      className="absolute inset-0 z-50 bg-slate-50 flex flex-col pointer-events-auto shadow-2xl"
+                    >
+                      <div className="flex items-center justify-between p-5 border-b-4 border-primary bg-white shadow-sm">
+                        <div className="flex items-center gap-2 font-black text-sm text-primary">
+                          <Bell className="h-5 w-5" />
+                          UNIFIED ALERTS
+                          <span className="bg-primary text-white text-[9px] px-2 py-0.5 ml-2">{unifiedAlerts.length}</span>
+                        </div>
+                        <button onClick={() => setShowMobileAlerts(false)} className="p-2 border-2 border-primary/20 rounded hover:bg-slate-100 transition-colors">
+                          <X className="h-5 w-5 text-primary" />
+                        </button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto divide-y divide-primary/10 bg-white">
+                        {unifiedAlerts.map(alert => (
+                          <div key={alert.id} className={`flex items-start gap-4 px-5 py-4 ${alert.source === 'GOOGLE' ? 'bg-slate-50' : 'bg-red-50/20'}`}>
+                            {alert.source === 'GOOGLE' ? (
+                              <Navigation className="h-5 w-5 text-blue-500 mt-0.5" />
+                            ) : (
+                              <Radio className="h-5 w-5 text-red-500 animate-pulse mt-0.5" />
+                            )}
+                            <div className="flex-1 flex flex-col">
+                              <span className="text-xs font-black text-primary leading-snug">{alert.message}</span>
+                              <div className="flex items-center gap-1.5 mt-1 opacity-60">
+                                <MapPin className="h-3 w-3" />
+                                <span className="text-[9px] font-bold text-primary uppercase leading-none">{alert.location}</span>
+                              </div>
+                              <span className="text-[9px] font-bold text-primary/40 mt-2 tracking-wider">{alert.time}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {unifiedAlerts.length === 0 && (
+                          <div className="p-12 text-center text-[10px] font-black text-primary/40 uppercase tracking-widest border-2 border-dashed border-primary/10 m-6">
+                            NO ACTIVE ALERTS DETECTED
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>
